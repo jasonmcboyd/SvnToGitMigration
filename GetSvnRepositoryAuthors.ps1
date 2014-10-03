@@ -32,6 +32,6 @@ $logEntries = svn log $SvnRepositoryUrl
 # Create a regular expression to capture the lines in the log that contain the author information.
 $regex = '^r\d+ \| [^\|]*\| [^\|]*\| \d+ line[s]?$'
 
-# Extract the author names from the log entries.
+# Extract a list of unique author names from the log entries.
 Write-Verbose "Extracting the SVN authors from the log entries."
 $logEntries | Where-Object { $_ -match $regex } | ForEach-Object { $_.Split('|')[1].Trim() } | Group-Object | Sort-Object Name | ForEach-Object { $_.Name } 
