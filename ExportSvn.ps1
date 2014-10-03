@@ -48,6 +48,7 @@ The default ignores include:
 bin/
 obj/
 *.suo
+*.csproj.user
 
 .PARAMETER RemoteOriginUrl
 The URL of the remote Git repository that will be added to the cloned repository as the remote origin.  This is optional.
@@ -178,7 +179,7 @@ $TagsDirectory = $null,
 $BranchesDirectory = $null,
 
 [String[]]
-$GitIgnores = @("bin/", "obj/", "*.suo"),
+$GitIgnores = @("bin/", "obj/", "*.suo", "*.csproj.user"),
 
 [String]
 $RemoteOriginUrl = $null,
