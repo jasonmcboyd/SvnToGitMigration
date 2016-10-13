@@ -8,7 +8,7 @@ This script will cleanly export an SVN repository to a local Git repository and,
 
 This script achieves a clean clone of the SVN repository by mapping the SVN users to Git users so that the Git author information is correct and gets rid of the git-svn-id.  Additionally, this script cleans up the weird remote branches that the clone command creates from SVN tags and makes real Git tags from them.
 
-This script was adapted from chapter 8.2 'Git and Other Systems - Migrating to Git' of the book, 'Pro Git', written by 'Scott Chacon'
+This script was adapted from chapter 9.2 'Git and Other Systems - Migrating to Git' of the book, 'Pro Git', written by 'Scott Chacon'
 
 http://git-scm.com/book/en/Git-and-Other-Systems-Migrating-to-Git
 
