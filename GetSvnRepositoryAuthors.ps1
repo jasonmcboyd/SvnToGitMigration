@@ -34,4 +34,9 @@ $regex = '^r\d+ \| [^\|]*\| [^\|]*\| \d+ line[s]?$'
 
 # Extract a list of unique author names from the log entries.
 Write-Verbose "Extracting the SVN authors from the log entries."
-$logEntries | Where-Object { $_ -match $regex } | ForEach-Object { $_.Split('|')[1].Trim() } | Group-Object | Sort-Object Name | ForEach-Object { $_.Name } 
+$logEntries `
+| Where-Object { $_ -match $regex } `
+| ForEach-Object { $_.Split('|')[1].Trim() } `
+| Group-Object `
+| Sort-Object Name `
+| ForEach-Object { $_.Name } 
