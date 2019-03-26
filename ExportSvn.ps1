@@ -193,148 +193,151 @@ $OriginRepositoryUsername)
 # Store the user's current directory
 Push-Location
 
-# If the local directory does not exist then create it.
-# Send the output of 'New-Item' to null so that the result is not written to the console window.
-if ((Test-Path $LocalRepositoryPath) -eq $false) {
-    Write-Verbose "The local directory, '$LocalRepositoryPath' does not exist.  Creating the local directory."
-    New-Item -ItemType Directory -Path $LocalRepositoryPath > $null
-}
+try {
+    # If the local directory does not exist then create it.
+    # Send the output of 'New-Item' to null so that the result is not written to the console window.
+    if ((Test-Path $LocalRepositoryPath) -eq $false) {
+        Write-Verbose "The local directory, '$LocalRepositoryPath' does not exist.  Creating the local directory."
+        New-Item -ItemType Directory -Path $LocalRepositoryPath > $null
+    }
 
-# Move to the local working directory that the SVN repository will be cloned to.
-Set-Location $LocalRepositoryPath
+    # Move to the local working directory that the SVN repository will be cloned to.
+    Set-Location $LocalRepositoryPath
 
-# Create the repository structure argument that will be passed to the 'git svn clone' command.
-$repositoryStructure = ""
-if (![String]::IsNullOrWhiteSpace($TrunkDirectory)) {
-    $repositoryStructure = "-T $TrunkDirectory"
-}
-Write-Debug "Repository structure after 'TrunkDirectory' test: $repositoryStructure"
-if (![String]::IsNullOrWhiteSpace($TagsDirectory)) {
-    $repositoryStructure = "$repositoryStructure -t $TagsDirectory"
-}
-Write-Debug "Repository structure after 'TagsDirectory' test: $repositoryStructure"
-if (![String]::IsNullOrWhiteSpace($BranchesDirectory)) {
-    $repositoryStructure = "$repositoryStructure -b $BranchesDirectory"
-}
-Write-Debug "Repository structure after 'BranchesDirectory' test: $repositoryStructure"
+    # Create the repository structure argument that will be passed to the 'git svn clone' command.
+    $repositoryStructure = ""
+    if (![String]::IsNullOrWhiteSpace($TrunkDirectory)) {
+        $repositoryStructure = "-T $TrunkDirectory"
+    }
+    Write-Debug "Repository structure after 'TrunkDirectory' test: $repositoryStructure"
+    if (![String]::IsNullOrWhiteSpace($TagsDirectory)) {
+        $repositoryStructure = "$repositoryStructure -t $TagsDirectory"
+    }
+    Write-Debug "Repository structure after 'TagsDirectory' test: $repositoryStructure"
+    if (![String]::IsNullOrWhiteSpace($BranchesDirectory)) {
+        $repositoryStructure = "$repositoryStructure -b $BranchesDirectory"
+    }
+    Write-Debug "Repository structure after 'BranchesDirectory' test: $repositoryStructure"
 
-# If the 'TrunkDirectory', 'TagsDirectory' or 'BranchesDirectory' arguments were not provided then assume the repository 
-# structure follows the traditional trunk\tags\branches structure.
-if ([String]::IsNullOrWhiteSpace($repositoryStructure)) {
-    $repositoryStructure = "-s"
-}
-Write-Debug "Repository structure after standard structure test: $repositoryStructure"
+    # If the 'TrunkDirectory', 'TagsDirectory' or 'BranchesDirectory' arguments were not provided then assume the repository 
+    # structure follows the traditional trunk\tags\branches structure.
+    if ([String]::IsNullOrWhiteSpace($repositoryStructure)) {
+        $repositoryStructure = "-s"
+    }
+    Write-Debug "Repository structure after standard structure test: $repositoryStructure"
 
-# Clone the SVN repository to a Git repository in the local working directory.
-Write-Verbose "Cloning the SVN repository."
-$command = "git svn clone $SvnRepositoryUrl $LocalRepositoryPath $repositoryStructure --authors-file=$AuthorsFilePath --no-metadata"
-Write-Debug "Command: $command"
-Invoke-Expression $command
-Write-Verbose "The SVN repository has been cloned to $LocalRepositoryPath."
+    # Clone the SVN repository to a Git repository in the local working directory.
+    Write-Verbose "Cloning the SVN repository."
+    $command = "git svn clone $SvnRepositoryUrl $LocalRepositoryPath $repositoryStructure --authors-file=$AuthorsFilePath --no-metadata"
+    Write-Debug "Command: $command"
+    Invoke-Expression $command
+    Write-Verbose "The SVN repository has been cloned to $LocalRepositoryPath."
 
-# Now we need to clean up the weird references that the 'git svn' command set up. 
-# First you’ll move the tags so they’re actual tags rather than strange remote branches, and then you’ll 
-# move the rest of the branches so they’re local.
+    # Now we need to clean up the weird references that the 'git svn' command set up. 
+    # First you’ll move the tags so they’re actual tags rather than strange remote branches, and then you’ll 
+    # move the rest of the branches so they’re local.
 
-# Get all 'tag' remote references in the Git repository.
-$refs = (git for-each-ref refs/remotes/tags)
+    # Get all 'tag' remote references in the Git repository.
+    $refs = (git for-each-ref refs/remotes/tags)
 
-# Loop over each reference and create a tag for each one and then delete the branch.
-Write-Verbose "Fixing the repository tags."
-foreach ($ref in $refs) {
-    $tagName = $ref.Split("/")[3]
+    # Loop over each reference and create a tag for each one and then delete the branch.
+    Write-Verbose "Fixing the repository tags."
+    foreach ($ref in $refs) {
+        $tagName = $ref.Split("/")[3]
 
-    Write-Verbose "Repository tag, '$tagName' has been created."
-    $command = "git tag $tagName tags/$tagName"
+        Write-Verbose "Repository tag, '$tagName' has been created."
+        $command = "git tag $tagName tags/$tagName"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
+
+        Write-Verbose "Repository branch, '$tagName' has been removed."
+        $command = "git branch -r -d tags/$tagName"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
+    }
+    Write-Verbose "All tags have been fixed."
+
+    # Get all the 'branch' remote references in the Git repository.
+    $refs = (git for-each-ref refs/remotes)
+
+    # Loop over each remote reference and create a proper branch and then delete the original.
+    Write-Verbose "Fixing the repository branches."
+    foreach ($ref in $refs) {
+        $branchName = $ref.Split("/")[2]
+
+        # Only create a branch if it is not named trunk.
+        # We do not want to end up with a master branch and trunk branch that are exactly the same.
+        if ($branchName -ne 'trunk') {
+            Write-Verbose "Proper repository branch, '$branchName', has been created."
+            $command = "git branch $branchName refs/remotes/$branchName"
+            Write-Debug "Command: $command"
+            Invoke-Expression $command
+        }
+
+        Write-Verbose "Weird '$branchName' branch created during the clone has been removed."
+        $command = "git branch -r -d $branchName"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
+    }
+    Write-Verbose "All branches have been fixed."
+
+    # Add the user name to the local repository configuration.
+    Write-Verbose "Adding the user name, '$RepositoryUserName', to the repositories local configuration."
+    $command = "git config --local user.name ""$RepositoryUserName"""
     Write-Debug "Command: $command"
     Invoke-Expression $command
 
-    Write-Verbose "Repository branch, '$tagName' has been removed."
-    $command = "git branch -r -d tags/$tagName"
+    # Add the user email to the local repository configuration.
+    Write-Verbose "Adding the user email address, 'RepositoryUserEmail', to the repositories local configuration."
+    $command = "git config --local user.email ""$RepositoryUserEmail"""
     Write-Debug "Command: $command"
     Invoke-Expression $command
-}
-Write-Verbose "All tags have been fixed."
 
-# Get all the 'branch' remote references in the Git repository.
-$refs = (git for-each-ref refs/remotes)
+    # Add the default ignored directories and files if any were provided and commit the .gitignore file to the repository.
+    if ($GitIgnores.Count -gt 0) {
+        foreach ($ignore in $GitIgnores) {
+            Write-Verbose "Adding '$ignore' to the .gitignore file."
+            Add-Content .\.gitignore $ignore
+        }
 
-# Loop over each remote reference and create a proper branch and then delete the original.
-Write-Verbose "Fixing the repository branches."
-foreach ($ref in $refs) {
-    $branchName = $ref.Split("/")[2]
+        Write-Verbose "Committing the .gitignore file to the local repository."
+        $command = "git add .gitignore"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
 
-    # Only create a branch if it is not named trunk.
-    # We do not want to end up with a master branch and trunk branch that are exactly the same.
-    if ($branchName -ne 'trunk') {
-        Write-Verbose "Proper repository branch, '$branchName', has been created."
-        $command = "git branch $branchName refs/remotes/$branchName"
+        $command = "git commit .gitignore -m ""Add .gitignore file"""
         Write-Debug "Command: $command"
         Invoke-Expression $command
     }
 
-    Write-Verbose "Weird '$branchName' branch created during the clone has been removed."
-    $command = "git branch -r -d $branchName"
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
-}
-Write-Verbose "All branches have been fixed."
-
-# Add the user name to the local repository configuration.
-Write-Verbose "Adding the user name, '$RepositoryUserName', to the repositories local configuration."
-$command = "git config --local user.name ""$RepositoryUserName"""
-Write-Debug "Command: $command"
-Invoke-Expression $command
-
-# Add the user email to the local repository configuration.
-Write-Verbose "Adding the user email address, 'RepositoryUserEmail', to the repositories local configuration."
-$command = "git config --local user.email ""$RepositoryUserEmail"""
-Write-Debug "Command: $command"
-Invoke-Expression $command
-
-# Add the default ignored directories and files if any were provided and commit the .gitignore file to the repository.
-if ($GitIgnores.Count -gt 0) {
-    foreach ($ignore in $GitIgnores) {
-        Write-Verbose "Adding '$ignore' to the .gitignore file."
-        Add-Content .\.gitignore $ignore
+    # If the 'RemoteOriginUrl' is not null, empty or white space then add it to the cloned repository as the remote origin.
+    if (![String]::IsNullOrWhiteSpace($RemoteOriginUrl)) {
+        
+        # Add the remote Git server to the local Git repository.
+        Write-Verbose "Adding '$RemoteOriginUrl' as the remote origin to the newly cloned repository."
+        $command = "git remote add origin $RemoteOriginUrl"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
     }
 
-    Write-Verbose "Committing the .gitignore file to the local repository."
-    $command = "git add .gitignore"
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
-
-    $command = "git commit .gitignore -m ""Add .gitignore file"""
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
-}
-
-# If the 'RemoteOriginUrl' is not null, empty or white space then add it to the cloned repository as the remote origin.
-if (![String]::IsNullOrWhiteSpace($RemoteOriginUrl)) {
+    # If the 'RemoteOriginUrl' is not null, empty or white space and the 'PushToRemoteOrigin' switch is true then push
+    # the cloned repository and its tags to the remote repository.
+    if (![String]::IsNullOrWhiteSpace($RemoteOriginUrl) -and $PushToRemoteOrigin -eq $true) {
     
-    # Add the remote Git server to the local Git repository.
-    Write-Verbose "Adding '$RemoteOriginUrl' as the remote origin to the newly cloned repository."
-    $command = "git remote add origin $RemoteOriginUrl"
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
+        # Push the new Git repository to the remote master Git server.
+        Write-Verbose "Pushing the repository to the remote origin."
+        $command = "git push origin -u --all"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
+
+        # Push the new Git repository's tags to the remote master Git server.
+        Write-Verbose "Pushing the repository's tags to the remote origin."
+        $command = "git push origin -u --tags"
+        Write-Debug "Command: $command"
+        Invoke-Expression $command
+    }
 }
-
-# If the 'RemoteOriginUrl' is not null, empty or white space and the 'PushToRemoteOrigin' switch is true then push
-# the cloned repository and its tags to the remote repository.
-if (![String]::IsNullOrWhiteSpace($RemoteOriginUrl) -and $PushToRemoteOrigin -eq $true) {
-  
-    # Push the new Git repository to the remote master Git server.
-    Write-Verbose "Pushing the repository to the remote origin."
-    $command = "git push origin -u --all"
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
-
-    # Push the new Git repository's tags to the remote master Git server.
-    Write-Verbose "Pushing the repository's tags to the remote origin."
-    $command = "git push origin -u --tags"
-    Write-Debug "Command: $command"
-    Invoke-Expression $command
+finally {
+    # Return to the user's original directory.
+    Pop-Location
 }
-
-# Return to the user's original directory.
-Pop-Location
